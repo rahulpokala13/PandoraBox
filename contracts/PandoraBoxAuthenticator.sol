@@ -9,6 +9,7 @@ contract PandoraBoxAuthenticator {
         address registeredBy;
         uint256 timestamp;
         bool exists;
+        uint256 blockNumber; // Included in struct
     }
 
     mapping(bytes32 => Product) public products;
@@ -17,7 +18,8 @@ contract PandoraBoxAuthenticator {
         bytes32 indexed productId,
         string name,
         address indexed registeredBy,
-        uint256 timestamp
+        uint256 timestamp,
+        uint256 blockNumber // Added to event
     );
 
     constructor() {
@@ -30,17 +32,18 @@ contract PandoraBoxAuthenticator {
             name: _name,
             registeredBy: msg.sender,
             timestamp: block.timestamp,
-            exists: true
+            exists: true,
+            blockNumber: block.number // Store block number
         });
-        emit ProductRegistered(_productId, _name, msg.sender, block.timestamp);
+        emit ProductRegistered(_productId, _name, msg.sender, block.timestamp, block.number);
     }
 
-    function verifyProduct(bytes32 _productId) public view returns (bool, string memory, address, uint256) {
+    function verifyProduct(bytes32 _productId) public view returns (bool, string memory, address, uint256, uint256) {
         if (products[_productId].exists) {
             Product memory p = products[_productId];
-            return (true, p.name, p.registeredBy, p.timestamp);
+            return (true, p.name, p.registeredBy, p.timestamp, p.blockNumber);
         } else {
-            return (false, "Product not found", address(0), 0);
+            return (false, "Product not found", address(0), 0, 0);
         }
     }
 }

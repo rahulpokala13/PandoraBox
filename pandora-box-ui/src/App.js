@@ -24,6 +24,7 @@ const abi = [
       {"internalType": "bool", "name": "", "type": "bool"},
       {"internalType": "string", "name": "", "type": "string"},
       {"internalType": "address", "name": "", "type": "address"},
+      {"internalType": "uint256", "name": "", "type": "uint256"},
       {"internalType": "uint256", "name": "", "type": "uint256"}
     ],
     "stateMutability": "view",
@@ -81,11 +82,18 @@ function App() {
     setLoadingVerify(true);
     try {
       const bytes32Id = ethers.encodeBytes32String(verifyId);
-      const [exists, prodName, registeredBy, timestamp] = await contract.verifyProduct(bytes32Id);
+      const [exists, prodName, registeredBy, timestamp, blockNumber] = await contract.verifyProduct(bytes32Id);
       if (exists) {
         const date = new Date(Number(timestamp) * 1000);
         const formattedTime = date.toLocaleString();
-        setResultVerify({ exists, name: prodName, registeredBy, timestamp: formattedTime });
+        // Convert BigInt to string to avoid JSON.stringify error
+        setResultVerify({
+          exists,
+          name: prodName,
+          registeredBy,
+          timestamp: formattedTime,
+          blockNumber: blockNumber.toString() // Convert BigInt to string
+        });
       } else {
         setResultVerify({ message: "Product not found" });
       }
