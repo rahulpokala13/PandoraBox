@@ -1,4 +1,3 @@
-// scripts/deploy.js
 const hre = require("hardhat");
 
 async function main() {
@@ -10,11 +9,17 @@ async function main() {
   const contractAddress = await contract.getAddress();
 
   console.log("PandoraBoxAuthenticator deployed to:", contractAddress);
+
+  // // Register a test product
+  // console.log("Registering test product 'Red Apple'...");
+  // const tx = await contract.registerProduct("Red Apple", hre.ethers.encodeBytes32String("redApple"));
+  // await tx.wait();
+  // console.log("Registered 'Red Apple' with ID 'redApple'");
 }
 
 main()
   .then(() => {
-    console.log("Deployment successful!");
+    console.log("Deployment and registration successful!");
     process.exit(0);
   })
   .catch((error) => {
