@@ -18,6 +18,20 @@ PandoraBoxAuthenticator allows users to:
    ```bash
    git clone https://github.com/your-username/PANDORABOX.git
    cd PANDORABOX
+2. Install dependencies:
+   ```bash
+   npm install
+   cd pandora-box-ui
+   npm install
+3. Run Hardhat node:
+   ```bash
+   npx hardhat node
+4. Deploy the contract:
+   ```bash
+   npx hardhat run scripts/deploy.js --network localhost
+5. Start the React App:
+   ```bash
+   npm start
 
 ```shell
 npx hardhat help
