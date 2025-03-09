@@ -42,6 +42,7 @@ function App() {
   const [resultVerify, setResultVerify] = useState(null);
   const [loadingRegister, setLoadingRegister] = useState(false);
   const [loadingVerify, setLoadingVerify] = useState(false);
+  const [view, setView] = useState("initial"); // "initial", "register", or "verify"
 
   useEffect(() => {
     const init = async () => {
@@ -86,13 +87,12 @@ function App() {
       if (exists) {
         const date = new Date(Number(timestamp) * 1000);
         const formattedTime = date.toLocaleString();
-        // Convert BigInt to string to avoid JSON.stringify error
         setResultVerify({
           exists,
           name: prodName,
           registeredBy,
           timestamp: formattedTime,
-          blockNumber: blockNumber.toString() // Convert BigInt to string
+          blockNumber: blockNumber.toString()
         });
       } else {
         setResultVerify({ message: "Product not found" });
@@ -104,6 +104,259 @@ function App() {
       setLoadingVerify(false);
     }
   };
+
+  // Helper to truncate address for display
+  const truncateAddress = (address) => {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
+  const renderInitialView = () => (
+    <div
+      style={{
+        background: "#fff",
+        padding: "30px",
+        borderRadius: "10px",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+        textAlign: "center",
+        maxWidth: "400px",
+        width: "100%"
+      }}
+    >
+      <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", fontWeight: 500 }}>
+        What would you like to do?
+      </h2>
+      <button
+        onClick={() => setView("register")}
+        style={{
+          width: "100%",
+          padding: "12px",
+          background: "#333",
+          border: "none",
+          borderRadius: "6px",
+          color: "#fff",
+          fontSize: "1rem",
+          cursor: "pointer",
+          marginBottom: "15px",
+          transition: "background 0.3s"
+        }}
+      >
+        Register Product
+      </button>
+      <button
+        onClick={() => setView("verify")}
+        style={{
+          width: "100%",
+          padding: "12px",
+          background: "#333",
+          border: "none",
+          borderRadius: "6px",
+          color: "#fff",
+          fontSize: "1rem",
+          cursor: "pointer",
+          transition: "background 0.3s"
+        }}
+      >
+        Verify Product
+      </button>
+    </div>
+  );
+
+  const renderRegisterView = () => (
+    <div
+      style={{
+        flex: "1",
+        minWidth: "300px",
+        background: "#fff",
+        padding: "30px",
+        borderRadius: "10px",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.1)"
+      }}
+    >
+      <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", fontWeight: 500 }}>
+        Register Product
+      </h2>
+      <input
+        type="text"
+        placeholder="Product Name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        style={{
+          width: "100%",
+          padding: "12px",
+          marginBottom: "15px",
+          border: "1px solid #ccc",
+          borderRadius: "6px",
+          fontSize: "1rem",
+          outline: "none",
+          boxSizing: "border-box"
+        }}
+      />
+      <input
+        type="text"
+        placeholder="Product ID"
+        value={productId}
+        onChange={(e) => setProductId(e.target.value)}
+        style={{
+          width: "100%",
+          padding: "12px",
+          marginBottom: "15px",
+          border: "1px solid #ccc",
+          borderRadius: "6px",
+          fontSize: "1rem",
+          outline: "none",
+          boxSizing: "border-box"
+        }}
+      />
+      <button
+        onClick={registerProduct}
+        disabled={loadingRegister || !contract}
+        style={{
+          width: "100%",
+          padding: "12px",
+          background: loadingRegister || !contract ? "#999" : "#333",
+          border: "none",
+          borderRadius: "6px",
+          color: "#fff",
+          fontSize: "1rem",
+          cursor: loadingRegister || !contract ? "not-allowed" : "pointer",
+          transition: "background 0.3s"
+        }}
+      >
+        {loadingRegister ? "Processing..." : "Register"}
+      </button>
+      <button
+        onClick={() => {
+          setView("initial");
+          setResultRegister(null);
+        }}
+        style={{
+          width: "100%",
+          padding: "12px",
+          background: "#666",
+          border: "none",
+          borderRadius: "6px",
+          color: "#fff",
+          fontSize: "1rem",
+          cursor: "pointer",
+          marginTop: "10px",
+          transition: "background 0.3s"
+        }}
+      >
+        Back
+      </button>
+      {resultRegister && (
+        <div
+          style={{
+            marginTop: "20px",
+            padding: "15px",
+            borderRadius: "6px",
+            border: "1px solid",
+            borderColor: resultRegister.error ? "#d9534f" : "#5cb85c",
+            background: resultRegister.error ? "#f2dede" : "#dff0d8",
+            fontSize: "0.9rem"
+          }}
+        >
+          <strong>{resultRegister.error ? "Error" : "Success"}</strong>
+          <p style={{ margin: "5px 0 0" }}>{resultRegister.error || resultRegister.message}</p>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderVerifyView = () => (
+    <div
+      style={{
+        flex: "1",
+        minWidth: "300px",
+        background: "#fff",
+        padding: "30px",
+        borderRadius: "10px",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.1)"
+      }}
+    >
+      <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", fontWeight: 500 }}>
+        Verify Product
+      </h2>
+      <input
+        type="text"
+        placeholder="Product ID"
+        value={verifyId}
+        onChange={(e) => setVerifyId(e.target.value)}
+        style={{
+          width: "100%",
+          padding: "12px",
+          marginBottom: "15px",
+          border: "1px solid #ccc",
+          borderRadius: "6px",
+          fontSize: "1rem",
+          outline: "none",
+          boxSizing: "border-box"
+        }}
+      />
+      <button
+        onClick={verifyProduct}
+        disabled={loadingVerify || !contract}
+        style={{
+          width: "100%",
+          padding: "12px",
+          background: loadingVerify || !contract ? "#999" : "#333",
+          border: "none",
+          borderRadius: "6px",
+          color: "#fff",
+          fontSize: "1rem",
+          cursor: loadingVerify || !contract ? "not-allowed" : "pointer",
+          transition: "background 0.3s"
+        }}
+      >
+        {loadingVerify ? "Processing..." : "Verify"}
+      </button>
+      <button
+        onClick={() => {
+          setView("initial");
+          setResultVerify(null);
+        }}
+        style={{
+          width: "100%",
+          padding: "12px",
+          background: "#666",
+          border: "none",
+          borderRadius: "6px",
+          color: "#fff",
+          fontSize: "1rem",
+          cursor: "pointer",
+          marginTop: "10px",
+          transition: "background 0.3s"
+        }}
+      >
+        Back
+      </button>
+      {resultVerify && (
+        <div
+          style={{
+            marginTop: "20px",
+            padding: "15px",
+            borderRadius: "6px",
+            border: "1px solid",
+            borderColor: resultVerify.error ? "#d9534f" : "#5cb85c",
+            background: resultVerify.error ? "#f2dede" : "#dff0d8",
+            fontSize: "0.9rem"
+          }}
+        >
+          <strong>{resultVerify.error ? "Error" : "Product Details"}</strong>
+          {resultVerify.exists ? (
+            <div style={{ marginTop: "5px", lineHeight: "1.5" }}>
+              <p>Product: {resultVerify.name}</p>
+              <p>Registered By: {truncateAddress(resultVerify.registeredBy)}</p>
+              <p>Date: {resultVerify.timestamp}</p>
+              <p>Block: {resultVerify.blockNumber}</p>
+            </div>
+          ) : (
+            <p style={{ margin: "5px 0 0" }}>{resultVerify.message || resultVerify.error}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div
@@ -122,7 +375,7 @@ function App() {
         Pandora Box
       </h1>
       <div style={{ textAlign: "center", marginBottom: "20px" }}>
-        Connected: {account || "Not connected"}
+        Connected: {account ? truncateAddress(account) : "Not connected"}
       </div>
       <div
         style={{
@@ -134,155 +387,9 @@ function App() {
           justifyContent: "center"
         }}
       >
-        {/* Register Card */}
-        <div
-          style={{
-            flex: "1",
-            minWidth: "300px",
-            background: "#fff",
-            padding: "30px",
-            borderRadius: "10px",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.1)"
-          }}
-        >
-          <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", fontWeight: 500 }}>
-            Register Product
-          </h2>
-          <input
-            type="text"
-            placeholder="Product Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "12px",
-              marginBottom: "15px",
-              border: "1px solid #ccc",
-              borderRadius: "6px",
-              fontSize: "1rem",
-              outline: "none",
-              boxSizing: "border-box"
-            }}
-          />
-          <input
-            type="text"
-            placeholder="Product ID"
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "12px",
-              marginBottom: "15px",
-              border: "1px solid #ccc",
-              borderRadius: "6px",
-              fontSize: "1rem",
-              outline: "none",
-              boxSizing: "border-box"
-            }}
-          />
-          <button
-            onClick={registerProduct}
-            disabled={loadingRegister || !contract}
-            style={{
-              width: "100%",
-              padding: "12px",
-              background: loadingRegister || !contract ? "#999" : "#333",
-              border: "none",
-              borderRadius: "6px",
-              color: "#fff",
-              fontSize: "1rem",
-              cursor: loadingRegister || !contract ? "not-allowed" : "pointer",
-              transition: "background 0.3s"
-            }}
-          >
-            {loadingRegister ? "Processing..." : "Register"}
-          </button>
-          {resultRegister && (
-            <div
-              style={{
-                marginTop: "20px",
-                padding: "15px",
-                borderRadius: "6px",
-                border: "1px solid",
-                borderColor: resultRegister.error ? "#d9534f" : "#5cb85c",
-                background: resultRegister.error ? "#f2dede" : "#dff0d8",
-                fontSize: "0.9rem"
-              }}
-            >
-              <strong>{resultRegister.error ? "Error" : "Result"}</strong>
-              <pre style={{ margin: "10px 0 0", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-                {JSON.stringify(resultRegister, null, 2)}
-              </pre>
-            </div>
-          )}
-        </div>
-
-        {/* Verify Card */}
-        <div
-          style={{
-            flex: "1",
-            minWidth: "300px",
-            background: "#fff",
-            padding: "30px",
-            borderRadius: "10px",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.1)"
-          }}
-        >
-          <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", fontWeight: 500 }}>
-            Verify Product
-          </h2>
-          <input
-            type="text"
-            placeholder="Product ID"
-            value={verifyId}
-            onChange={(e) => setVerifyId(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "12px",
-              marginBottom: "15px",
-              border: "1px solid #ccc",
-              borderRadius: "6px",
-              fontSize: "1rem",
-              outline: "none",
-              boxSizing: "border-box"
-            }}
-          />
-          <button
-            onClick={verifyProduct}
-            disabled={loadingVerify || !contract}
-            style={{
-              width: "100%",
-              padding: "12px",
-              background: loadingVerify || !contract ? "#999" : "#333",
-              border: "none",
-              borderRadius: "6px",
-              color: "#fff",
-              fontSize: "1rem",
-              cursor: loadingVerify || !contract ? "not-allowed" : "pointer",
-              transition: "background 0.3s"
-            }}
-          >
-            {loadingVerify ? "Processing..." : "Verify"}
-          </button>
-          {resultVerify && (
-            <div
-              style={{
-                marginTop: "20px",
-                padding: "15px",
-                borderRadius: "6px",
-                border: "1px solid",
-                borderColor: resultVerify.error ? "#d9534f" : "#5cb85c",
-                background: resultVerify.error ? "#f2dede" : "#dff0d8",
-                fontSize: "0.9rem"
-              }}
-            >
-              <strong>{resultVerify.error ? "Error" : "Result"}</strong>
-              <pre style={{ margin: "10px 0 0", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-                {JSON.stringify(resultVerify, null, 2)}
-              </pre>
-            </div>
-          )}
-        </div>
+        {view === "initial" && renderInitialView()}
+        {view === "register" && renderRegisterView()}
+        {view === "verify" && renderVerifyView()}
       </div>
     </div>
   );
