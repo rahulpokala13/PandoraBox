@@ -1,17 +1,23 @@
+// scripts/deploy.js
 const hre = require("hardhat");
 
 async function main() {
   const PandoraBoxAuthenticator = await hre.ethers.getContractFactory("PandoraBoxAuthenticator");
   console.log("Deploying PandoraBoxAuthenticator...");
+
   const contract = await PandoraBoxAuthenticator.deploy();
-
-  // Wait for the contract to be mined and fully deployed
   await contract.waitForDeployment();
+  const contractAddress = await contract.getAddress();
 
-  console.log("PandoraBoxAuthenticator deployed to:", await contract.getAddress());
+  console.log("PandoraBoxAuthenticator deployed to:", contractAddress);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+main()
+  .then(() => {
+    console.log("Deployment successful!");
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error("Deployment failed:", error);
+    process.exit(1);
+  });
