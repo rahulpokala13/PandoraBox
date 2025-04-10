@@ -12,7 +12,13 @@ contract PandoraBoxAuthenticator {
         uint256 blockNumber;
     }
 
+    struct Verification {
+        address verifier;
+        uint256 timestamp;
+    }
+
     mapping(bytes32 => Product) public products;
+    mapping(bytes32 => Verification[]) public verifications;
 
     event ProductRegistered(
         bytes32 indexed productId,
@@ -21,6 +27,11 @@ contract PandoraBoxAuthenticator {
         uint256 timestamp,
         uint256 blockNumber
     );
+    event ProductVerified(
+        bytes32 indexed productId,
+        address indexed verifier,
+        uint256 timestamp
+    );
 
     constructor() {
         owner = msg.sender;
@@ -28,7 +39,7 @@ contract PandoraBoxAuthenticator {
 
     function registerProduct(string memory _name, bytes32 _productId, uint256 _timestamp) public {
         require(!products[_productId].exists, "Product already registered");
-        uint256 timestampToUse = _timestamp == 0 ? block.timestamp : _timestamp; // Use provided timestamp or default to current
+        uint256 timestampToUse = _timestamp == 0 ? block.timestamp : _timestamp;
         products[_productId] = Product({
             name: _name,
             registeredBy: msg.sender,
@@ -39,17 +50,34 @@ contract PandoraBoxAuthenticator {
         emit ProductRegistered(_productId, _name, msg.sender, timestampToUse, block.number);
     }
 
-    // Overload for backward compatibility (no timestamp)
     function registerProduct(string memory _name, bytes32 _productId) public {
-        registerProduct(_name, _productId, 0); // Default to block.timestamp
+        registerProduct(_name, _productId, 0);
     }
 
-    function verifyProduct(bytes32 _productId) public view returns (bool, string memory, address, uint256, uint256) {
-        if (products[_productId].exists) {
-            Product memory p = products[_productId];
-            return (true, p.name, p.registeredBy, p.timestamp, p.blockNumber);
-        } else {
-            return (false, "Product not found", address(0), 0, 0);
-        }
+    function verifyProduct(bytes32 _productId) public returns (bool, string memory, address, uint256, uint256) {
+        require(products[_productId].exists, "Product does not exist");
+        Product memory p = products[_productId];
+        verifications[_productId].push(Verification({
+            verifier: msg.sender,
+            timestamp: block.timestamp
+        }));
+        emit ProductVerified(_productId, msg.sender, block.timestamp);
+        return (true, p.name, p.registeredBy, p.timestamp, p.blockNumber);
+    }
+
+    function getVerifications(bytes32 _productId) public view returns (Verification[] memory) {
+        require(products[_productId].exists, "Product does not exist");
+        return verifications[_productId];
+    }
+
+    function getProduct(bytes32 _productId) public view returns (
+        bool exists,
+        string memory name,
+        address registeredBy,
+        uint256 timestamp,
+        uint256 blockNumber
+    ) {
+        Product memory p = products[_productId];
+        return (p.exists, p.name, p.registeredBy, p.timestamp, p.blockNumber);
     }
 }
