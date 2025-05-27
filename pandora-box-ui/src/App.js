@@ -82,6 +82,7 @@ const abi = [
     ],
     stateMutability: "nonpayable",
     type: "function",
+
   },
   {
     inputs: [{ internalType: "bytes32", name: "_productId", type: "bytes32" }],
@@ -219,55 +220,79 @@ function App() {
   }, [contract, contractLoading, initializeContract]);
 
   const fetchVerifications = useCallback(
-    async (productId) => {
-      if (!contract) {
-        console.error("Contract not initialized for fetching verifications");
+  async (productId) => {
+    if (!contract) {
+      console.error("Contract not initialized for fetching verifications");
+      return;
+    }
+
+    // ✅ PATCH: Assign seller "Rahul pokala" products to logged-in user (if missing)
+    try {
+      const loggedInUser = localStorage.getItem("loggedInUser");
+      const registeredProducts = JSON.parse(localStorage.getItem("registeredProducts") || "[]");
+      let updated = false;
+
+      const updatedProducts = registeredProducts.map((product) => {
+        if (!product.seller && product.name === "Rahul pokala") {
+          updated = true;
+          return { ...product, seller: loggedInUser };
+        }
+        return product;
+      });
+
+      if (updated) {
+        localStorage.setItem("registeredProducts", JSON.stringify(updatedProducts));
+        console.log("Old 'Rahul pokala' products patched with seller:", loggedInUser);
+      }
+    } catch (e) {
+      console.error("Error patching product sellers:", e.message);
+    }
+
+    try {
+      const bytes32Id = ethers.encodeBytes32String(productId);
+      const verifications = await contract.getVerifications(bytes32Id);
+      console.log(`Raw verifications for ${productId}:`, verifications);
+
+      // Get local verifications from localStorage
+      const localVerifications = JSON.parse(localStorage.getItem("productVerifications") || "[]").filter(
+        (v) => v.productId === productId
+      );
+
+      if (!verifications || verifications.length === 0) {
+        console.log(`No verifications found for ${productId}`);
+        setProductVerifications((prev) => ({
+          ...prev,
+          [productId]: [],
+        }));
         return;
       }
-      try {
-        const bytes32Id = ethers.encodeBytes32String(productId);
-        const verifications = await contract.getVerifications(bytes32Id);
-        console.log(`Raw verifications for ${productId}:`, verifications);
 
-        // Get local verifications from localStorage
-        const localVerifications = JSON.parse(localStorage.getItem("productVerifications") || "[]").filter(
-          (v) => v.productId === productId
-        );
+      // Merge blockchain verifications with local usernames
+      const formattedVerifications = verifications.map((v, index) => {
+        const localMatch = localVerifications[index] || {};
+        return {
+          verifier: v.verifier,
+          timestamp: new Date(Number(v.timestamp) * 1000).toLocaleString(),
+          username: localMatch.username || "Unknown User",
+        };
+      });
 
-        if (!verifications || verifications.length === 0) {
-          console.log(`No verifications found for ${productId}`);
-          setProductVerifications((prev) => ({
-            ...prev,
-            [productId]: [],
-          }));
-          return;
-        }
+      console.log(`Formatted verifications for ${productId}:`, formattedVerifications);
+      setProductVerifications((prev) => ({
+        ...prev,
+        [productId]: formattedVerifications,
+      }));
+    } catch (error) {
+      console.error(`Failed to fetch verifications for ${productId}:`, error.message);
+      setProductVerifications((prev) => ({
+        ...prev,
+        [productId]: [{ error: `Failed to load verifications: ${error.message}` }],
+      }));
+    }
+  },
+  [contract]
+);
 
-        // Merge blockchain verifications with local usernames
-        const formattedVerifications = verifications.map((v, index) => {
-          const localMatch = localVerifications[index] || {};
-          return {
-            verifier: v.verifier,
-            timestamp: new Date(Number(v.timestamp) * 1000).toLocaleString(),
-            username: localMatch.username || "Unknown User",
-          };
-        });
-
-        console.log(`Formatted verifications for ${productId}:`, formattedVerifications);
-        setProductVerifications((prev) => ({
-          ...prev,
-          [productId]: formattedVerifications,
-        }));
-      } catch (error) {
-        console.error(`Failed to fetch verifications for ${productId}:`, error.message);
-        setProductVerifications((prev) => ({
-          ...prev,
-          [productId]: [{ error: `Failed to load verifications: ${error.message}` }],
-        }));
-      }
-    },
-    [contract]
-  );
 
   const verifyProductById = useCallback(
     async (id) => {
@@ -317,10 +342,14 @@ function App() {
         });
         localStorage.setItem("productVerifications", JSON.stringify(localVerifications));
 
+        const users = JSON.parse(localStorage.getItem("users") || "[]");
+        const sellerName = users.find((u) => u.walletAddress === registeredBy)?.username || registeredBy;
+
+
         setResultVerify({
           exists,
           name,
-          registeredBy,
+          registeredBy: sellerName,
           timestamp: formattedTime,
           blockNumber: blockNumber.toString(),
         });
@@ -380,7 +409,7 @@ function App() {
     } else if (username === "" || password === "") {
       setRegisterError("Username and password cannot be empty");
     } else {
-      users.push({ username, password, role, registrationDate: new Date().toLocaleString() });
+      users.push({ username, password, role, registrationDate: new Date().toLocaleString(),walletAddress: account });
       localStorage.setItem("users", JSON.stringify(users));
       setView("login");
       setRegisterError(null);
@@ -465,29 +494,29 @@ function App() {
     }
   };
 
-  const startScanner = async () => {
-    if (!contract) {
-      setScanStatus("Blockchain not connected. Please log in first.");
-      return;
-    }
-    setScanning(true);
-    setScanStatus("Starting scanner...");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: 640, height: 480 },
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-      }
-      setScanStatus("Scanning... Please align the QR code.");
-      requestAnimationFrame(tick);
-    } catch (error) {
-      console.error("Scanner error:", error);
-      setScanStatus("Error: " + error.message);
-      setScanning(false);
-    }
-  };
+  // // const startScanner = async () => {
+  //   if (!contract) {
+  //     setScanStatus("Blockchain not connected. Please log in first.");
+  //     return;
+  //   }
+  //   setScanning(true);
+  //   setScanStatus("Starting scanner...");
+  //   try {
+  //     const stream = await navigator.mediaDevices.getUserMedia({
+  //       video: { facingMode: "environment", width: 640, height: 480 },
+  //     });
+  //     if (videoRef.current) {
+  //       videoRef.current.srcObject = stream;
+  //       videoRef.current.play();
+  //     }
+  //     setScanStatus("Scanning... Please align the QR code.");
+  //     requestAnimationFrame(tick);
+  //   } catch (error) {
+  //     console.error("Scanner error:", error);
+  //     setScanStatus("Error: " + error.message);
+  //     setScanning(false);
+  //   }
+  // };
 
   const stopScanner = () => {
     if (videoRef.current && videoRef.current.srcObject) {
@@ -497,37 +526,37 @@ function App() {
     setScanStatus("");
   };
 
-  const tick = () => {
-    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-      const canvas = canvasRef.current;
-      if (canvas) {
-        canvas.height = videoRef.current.videoHeight;
-        canvas.width = videoRef.current.videoWidth;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
-          if (code) {
-            setScanStatus("QR Detected: " + code.data);
-            try {
-              const url = new URL(code.data);
-              const productIdFromQR = url.searchParams.get("productId");
-              if (productIdFromQR) {
-                stopScanner();
-                verifyProductById(productIdFromQR);
-              } else {
-                setScanStatus("Invalid QR code format: No productId found.");
-              }
-            } catch (error) {
-              setScanStatus("Invalid QR code URL");
-            }
-          }
-        }
-      }
-    }
-    if (scanning) requestAnimationFrame(tick);
-  };
+  // const tick = () => {
+  //   if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+  //     const canvas = canvasRef.current;
+  //     if (canvas) {
+  //       canvas.height = videoRef.current.videoHeight;
+  //       canvas.width = videoRef.current.videoWidth;
+  //       const ctx = canvas.getContext("2d");
+  //       if (ctx) {
+  //         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+  //         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  //         const code = jsQR(imageData.data, imageData.width, imageData.height);
+  //         if (code) {
+  //           setScanStatus("QR Detected: " + code.data);
+  //           try {
+  //             const url = new URL(code.data);
+  //             const productIdFromQR = url.searchParams.get("productId");
+  //             if (productIdFromQR) {
+  //               stopScanner();
+  //               verifyProductById(productIdFromQR);
+  //             } else {
+  //               setScanStatus("Invalid QR code format: No productId found.");
+  //             }
+  //           } catch (error) {
+  //             setScanStatus("Invalid QR code URL");
+  //           }
+  //         }
+  //       }
+  //     }
+  //   }
+  //   if (scanning) requestAnimationFrame(tick);
+  // };
 
   const scanQrFromImage = () => {
     if (!contract) {
@@ -709,69 +738,85 @@ function App() {
   );
 
   const renderSellerDashboard = () => {
-    const loggedInUser = localStorage.getItem("loggedInUser");
-    const products = JSON.parse(localStorage.getItem("registeredProducts") || "[]").filter(
-      (p) => p.seller === loggedInUser
-    );
-    return (
-      <div style={{ background: isDarkMode ? "#2a2a2a" : "#fff", padding: "30px", borderRadius: "10px", boxShadow: "0 2px 10px rgba(0,0,0,0.2)", textAlign: "center", maxWidth: "600px", width: "100%" }}>
-        <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", fontWeight: 500, color: isDarkMode ? "#fff" : "#333" }}>Seller Dashboard</h2>
-        {contractLoading && <p>Loading blockchain connection...</p>}
-        {contractError && <p style={{ color: isDarkMode ? "#ff9999" : "#721c24" }}>{contractError}</p>}
-        <button onClick={() => setView("registerProduct")} style={{ width: "100%", padding: "12px", background: isDarkMode ? "#007bff" : "#333", border: "none", borderRadius: "6px", color: "#fff", fontSize: "1rem", cursor: "pointer", marginBottom: "15px", transition: "background 0.3s" }}>
-          Register Product
-        </button>
-        {products.length > 0 ? (
-          <div style={{ marginTop: "20px", textAlign: "left" }}>
-            <h3 style={{ fontSize: "1.2rem", marginBottom: "10px", color: isDarkMode ? "#fff" : "#333" }}>Registered Products</h3>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem", color: isDarkMode ? "#fff" : "#333" }}>
-              <thead>
-                <tr style={{ borderBottom: `1px solid ${isDarkMode ? "#444" : "#ccc"}` }}>
-                  <th style={{ padding: "8px", textAlign: "left" }}>Name</th>
-                  <th style={{ padding: "8px", textAlign: "left" }}>ID</th>
-                  <th style={{ padding: "8px", textAlign: "left" }}>Date</th>
-                  <th style={{ padding: "8px", textAlign: "left" }}>Verifiers</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((product, index) => (
-                  <tr key={index} style={{ borderBottom: `1px solid ${isDarkMode ? "#333" : "#eee"}` }}>
-                    <td style={{ padding: "8px" }}>{product.name}</td>
-                    <td style={{ padding: "8px" }}>{product.productId}</td>
-                    <td style={{ padding: "8px" }}>{new Date(product.timestamp * 1000).toLocaleDateString()}</td>
-                    <td style={{ padding: "8px" }}>
-                      <button onClick={() => fetchVerifications(product.productId)} style={{ padding: "4px 8px", background: isDarkMode ? "#1a73e8" : "#007bff", border: "none", borderRadius: "4px", color: "#fff", cursor: "pointer" }}>
-                        Show
-                      </button>
-                      {productVerifications[product.productId] ? (
-                        Array.isArray(productVerifications[product.productId]) ? (
-                          productVerifications[product.productId].length > 0 ? (
-                            <ul style={{ marginTop: "5px", paddingLeft: "20px" }}>
-                              {productVerifications[product.productId].map((v, i) => (
-                                <li key={i}>{v.username} - {v.timestamp}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p style={{ marginTop: "5px", color: isDarkMode ? "#999" : "#666" }}>No verifications yet</p>
-                          )
+  const loggedInUser = localStorage.getItem("loggedInUser");
+
+  // ✅ PATCH: Assign seller to any products with name 'Rahul pokala'
+  const allProducts = JSON.parse(localStorage.getItem("registeredProducts") || "[]");
+  let updated = false;
+  const patchedProducts = allProducts.map((product) => {
+    if (product.name === "Rahul pokala" && product.seller !== loggedInUser) {
+      updated = true;
+      return { ...product, seller: loggedInUser };
+    }
+    return product;
+  });
+  if (updated) {
+    localStorage.setItem("registeredProducts", JSON.stringify(patchedProducts));
+  }
+
+  // ✅ Continue with filtered view
+  const products = patchedProducts.filter((p) => p.seller === loggedInUser);
+
+  return (
+    <div style={{ background: isDarkMode ? "#2a2a2a" : "#fff", padding: "30px", borderRadius: "10px", boxShadow: "0 2px 10px rgba(0,0,0,0.2)", textAlign: "center", maxWidth: "600px", width: "100%" }}>
+      <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", fontWeight: 500, color: isDarkMode ? "#fff" : "#333" }}>Seller Dashboard</h2>
+      {contractLoading && <p>Loading blockchain connection...</p>}
+      {contractError && <p style={{ color: isDarkMode ? "#ff9999" : "#721c24" }}>{contractError}</p>}
+      <button onClick={() => setView("registerProduct")} style={{ width: "100%", padding: "12px", background: isDarkMode ? "#007bff" : "#333", border: "none", borderRadius: "6px", color: "#fff", fontSize: "1rem", cursor: "pointer", marginBottom: "15px", transition: "background 0.3s" }}>
+        Register Product
+      </button>
+      {products.length > 0 ? (
+        <div style={{ marginTop: "20px", textAlign: "left" }}>
+          <h3 style={{ fontSize: "1.2rem", marginBottom: "10px", color: isDarkMode ? "#fff" : "#333" }}>Registered Products</h3>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem", color: isDarkMode ? "#fff" : "#333" }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${isDarkMode ? "#444" : "#ccc"}` }}>
+                <th style={{ padding: "8px", textAlign: "left" }}>Name</th>
+                <th style={{ padding: "8px", textAlign: "left" }}>ID</th>
+                <th style={{ padding: "8px", textAlign: "left" }}>Date</th>
+                <th style={{ padding: "8px", textAlign: "left" }}>Verifiers</th>
+              </tr>
+            </thead>
+            <tbody>
+              {products.map((product, index) => (
+                <tr key={index} style={{ borderBottom: `1px solid ${isDarkMode ? "#333" : "#eee"}` }}>
+                  <td style={{ padding: "8px" }}>{product.name}</td>
+                  <td style={{ padding: "8px" }}>{product.productId}</td>
+                  <td style={{ padding: "8px" }}>{new Date(product.timestamp * 1000).toLocaleDateString()}</td>
+                  <td style={{ padding: "8px" }}>
+                    <button onClick={() => fetchVerifications(product.productId)} style={{ padding: "4px 8px", background: isDarkMode ? "#1a73e8" : "#007bff", border: "none", borderRadius: "4px", color: "#fff", cursor: "pointer" }}>
+                      Show
+                    </button>
+                    {productVerifications[product.productId] ? (
+                      Array.isArray(productVerifications[product.productId]) ? (
+                        productVerifications[product.productId].length > 0 ? (
+                          <ul style={{ marginTop: "5px", paddingLeft: "20px" }}>
+                            {productVerifications[product.productId].map((v, i) => (
+                              <li key={i}>{v.username} - {v.timestamp}</li>
+                            ))}
+                          </ul>
                         ) : (
-                          <p style={{ marginTop: "5px", color: isDarkMode ? "#ff9999" : "#721c24" }}>{productVerifications[product.productId][0].error}</p>
+                          <p style={{ marginTop: "5px", color: isDarkMode ? "#999" : "#666" }}>No verifications yet</p>
                         )
                       ) : (
-                        <p style={{ marginTop: "5px", color: isDarkMode ? "#999" : "#666" }}>Click 'Show' to load verifications</p>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p style={{ marginTop: "20px", color: isDarkMode ? "#999" : "#666" }}>No products registered yet.</p>
-        )}
-      </div>
-    );
-  };
+                        <p style={{ marginTop: "5px", color: isDarkMode ? "#ff9999" : "#721c24" }}>{productVerifications[product.productId][0].error}</p>
+                      )
+                    ) : (
+                      <p style={{ marginTop: "5px", color: isDarkMode ? "#999" : "#666" }}>Click 'Show' to load verifications</p>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p style={{ marginTop: "20px", color: isDarkMode ? "#999" : "#666" }}>No products registered yet.</p>
+      )}
+    </div>
+  );
+};
+
 
   const handleChangePassword = () => {
     setPasswordChangeError(null);
@@ -936,9 +981,9 @@ function App() {
       <button onClick={scanQrFromImage} disabled={!contract || contractLoading} style={{ width: "100%", padding: "12px", background: !contract || contractLoading ? (isDarkMode ? "#666" : "#999") : isDarkMode ? "#28a745" : "#28a745", border: "none", borderRadius: "6px", color: "#fff", fontSize: "1rem", cursor: !contract || contractLoading ? "not-allowed" : "pointer", marginBottom: "10px" }}>
         Scan QR from Image
       </button>
-      <button onClick={scanning ? stopScanner : startScanner} disabled={!contract || contractLoading} style={{ width: "100%", padding: "12px", background: !contract || contractLoading ? (isDarkMode ? "#666" : "#999") : isDarkMode ? "#1a73e8" : "#007bff", border: "none", borderRadius: "6px", color: "#fff", fontSize: "1rem", cursor: !contract || contractLoading ? "not-allowed" : "pointer", marginBottom: "10px" }}>
-        {scanning ? "Stop Scanning" : "Scan QR with Webcam"}
-      </button>
+      {/* <button onClick={scanning ? stopScanner : startScanner} disabled={!contract || contractLoading} style={{ width: "100%", padding: "12px", background: !contract || contractLoading ? (isDarkMode ? "#666" : "#999") : isDarkMode ? "#1a73e8" : "#007bff", border: "none", borderRadius: "6px", color: "#fff", fontSize: "1rem", cursor: !contract || contractLoading ? "not-allowed" : "pointer", marginBottom: "10px" }}> */}
+        {/* {scanning ? "Stop Scanning" : "Scan QR with Webcam"} */}
+      {/* </button> */}
       <button onClick={() => { setView("customerDashboard"); setResultVerify(null); stopScanner(); setQrImagePreview(null); }} style={{ width: "100%", padding: "12px", background: isDarkMode ? "#555" : "#666", border: "none", borderRadius: "6px", color: "#fff", fontSize: "1rem", cursor: "pointer", transition: "background 0.3s" }}>
         Back
       </button>
@@ -1405,3 +1450,4 @@ function App() {
 }
 
 export default App;
+
