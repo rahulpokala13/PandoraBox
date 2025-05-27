@@ -174,29 +174,6 @@ function App() {
     }
   }, []);
 
-  // Assign existing products to the first seller
-  useEffect(() => {
-    const users = JSON.parse(localStorage.getItem("users") || "[]");
-    const products = JSON.parse(localStorage.getItem("registeredProducts") || "[]");
-    const firstSeller = users.find((u) => u.role === "seller")?.username;
-    
-    if (firstSeller && products.length > 0) {
-      let updated = false;
-      const updatedProducts = products.map((product) => {
-        if (!product.seller) {
-          updated = true;
-          return { ...product, seller: firstSeller };
-        }
-        return product;
-      });
-
-      if (updated) {
-        localStorage.setItem("registeredProducts", JSON.stringify(updatedProducts));
-        console.log(`Assigned ${updatedProducts.length} products to first seller: ${firstSeller}`);
-      }
-    }
-  }, []);
-
   const initializeContract = useCallback(async () => {
     if (contract) return;
     setContractLoading(true);
@@ -271,24 +248,26 @@ function App() {
           const localMatch = localVerifications[index] || {};
           return {
             verifier: v.verifier,
-            timestamp: new Date(Number(v.timestamp)).toLocaleString(),
-            username: localMatch?.username || "anonymous",
+            timestamp: new Date(Number(v.timestamp) * 1000).toLocaleString(),
+            username: localMatch.username || "Unknown User",
           };
         });
 
-        console.log(`Verifications for ${productId}:`, formattedVerifications);
+        console.log(`Formatted verifications for ${productId}:`, formattedVerifications);
         setProductVerifications((prev) => ({
           ...prev,
           [productId]: formattedVerifications,
         }));
-      } catch (e) {
-        console.error(`Failed to fetch ${productId}: ${e.message}`);
+      } catch (error) {
+        console.error(`Failed to fetch verifications for ${productId}:`, error.message);
         setProductVerifications((prev) => ({
           ...prev,
-          [productId]: [{ error: `Failed to load ${e.message}` }],
+          [productId]: [{ error: `Failed to load verifications: ${error.message}` }],
         }));
       }
-    }, [contract]);
+    },
+    [contract]
+  );
 
   const verifyProductById = useCallback(
     async (id) => {
@@ -303,10 +282,10 @@ function App() {
       setLoadingVerify(true);
       setResultVerify(null);
       try {
-        const bytes32Id = ethers.stringify(id);
+        const bytes32Id = ethers.encodeBytes32String(id);
 
         // Check if product exists on-chain
-        const productCheck = await getProduct();
+        const productCheck = await contract.getProduct(bytes32Id);
         if (!productCheck[0]) {
           setResultVerify({ error: "Product not registered yet." });
           setLoadingVerify(false);
@@ -314,11 +293,11 @@ function App() {
         }
 
         // Call verifyProduct transaction
-        const tx = await verifyProduct();
+        const tx = await contract.verifyProduct(bytes32Id);
         await tx.wait();
 
         // Fetch product details after verification
-        const [exists, name, registeredBy, timestamp, blockNumber] = await getProduct();
+        const [exists, name, registeredBy, timestamp, blockNumber] = await contract.getProduct(bytes32Id);
 
         if (!exists) {
           setResultVerify({ error: "Product not found after verification." });
@@ -330,12 +309,11 @@ function App() {
         // Save verification with username in localStorage
         const loggedInUser = localStorage.getItem("loggedInUser");
         const verificationTime = Math.floor(Date.now() / 1000);
-        const localVerifications = JSON.parse(localStorage.getItem("Verifications"productVerifications") || "[]");
+        const localVerifications = JSON.parse(localStorage.getItem("productVerifications") || "[]");
         localVerifications.push({
-          id,
-          productId: username,
+          productId: id,
           username: loggedInUser || "Anonymous",
-          verificationTime,
+          timestamp: verificationTime,
         });
         localStorage.setItem("productVerifications", JSON.stringify(localVerifications));
 
@@ -343,15 +321,22 @@ function App() {
           exists,
           name,
           registeredBy,
-          formattedTime,
-          timestamp: blockNumber.toString(),
-          verificationTime,
+          timestamp: formattedTime,
+          blockNumber: blockNumber.toString(),
         });
 
         fetchVerifications(id);
       } catch (error) {
         console.error("Verification error:", error);
-        setResultVerify({ error: "Failed to verify product: " + (error.message || "Unknown error") });
+        if (error.code === "BAD_DATA") {
+          setResultVerify({
+            error: "Failed to decode product data. Ensure the product is registered and the contract address is correct.",
+          });
+        } else if (error.message.includes("execution reverted")) {
+          setResultVerify({ error: "Transaction failed: " + (error.reason || "Unknown reason") });
+        } else {
+          setResultVerify({ error: "Failed to verify product: " + (error.message || "Unknown error") });
+        }
       } finally {
         setLoadingVerify(false);
       }
@@ -864,39 +849,126 @@ function App() {
 
   const renderCustomerDashboard = () => (
     <div style={{ background: isDarkMode ? "#2a2a2a" : "#fff", padding: "30px", borderRadius: "10px", boxShadow: "0 2px 10px rgba(0,0,0,0.2)", textAlign: "center", maxWidth: "400px", width: "100%" }}>
-      <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", fontWeight: 500, color: "#333" }}>Customer Dashboard</h2>
+      <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", fontWeight: 500, color: isDarkMode ? "#fff" : "#333" }}>Customer Dashboard</h2>
       {contractLoading && <p>Loading blockchain connection...</p>}
-      {contractError && <p style={{ color: "#721c24" }}>{contractError}</p>}
-      <p style={{ marginBottom: "10px", color: "#666" }}>
+      {contractError && <p style={{ color: isDarkMode ? "#ff9999" : "#721c24" }}>{contractError}</p>}
+      <p style={{ marginBottom: "10px", color: isDarkMode ? "#ccc" : "#666" }}>
         Contract: {contract ? contract.address : "Not Connected ❌"}
         <br />
         Account: {account || "No account"}
       </p>
-      <button onClick={() => setView("verify")} style={{ width: "100%", padding: "12px", background: "#333", border: "none", borderRadius: "6px", color: "#fff", fontSize: "1rem", cursor: "pointer", marginBottom: "15px", transition: "background 0.3s" }}>
+      <button onClick={() => setView("verify")} style={{ width: "100%", padding: "12px", background: isDarkMode ? "#007bff" : "#333", border: "none", borderRadius: "6px", color: "#fff", fontSize: "1rem", cursor: "pointer", marginBottom: "15px", transition: "background 0.3s" }}>
         Verify Product
       </button>
     </div>
   );
 
   const renderRegisterProductView = () => (
-    <div style={{ flex: "1", minWidth: "300px", background: "#fff", padding: "30px", borderRadius: "10px", boxShadow: "0 2px 10px rgba(0,0,0,0.2)" }}>
-      <h2 style="font-size: 1.5rem; margin-bottom: 20px; color: #333;">Register Product</h2>
-      <input type="text" placeholder="Product Name" value="" style="width: 100%; padding: 12px; margin-bottom: 15px; border: 2px solid #333; border-radius: 4px; font-size: 1rem;" />
-      <input type="text" placeholder="ID" value="" style="width: 100%; padding: 12px; margin-bottom: 15px; border: 2px solid #333; border-radius: 4px; font-size: 1rem;" />
-      <button style="width: 100%; padding: 12px; background: #333; border-radius: 4px; color: #fff; font-size: 1rem; cursor: pointer;">Register</button>
-      <button style="width: 100%; margin-top: 20px; padding: 12px; background: #666; border-radius: 4px; color: #fff; font-size: 1rem; cursor: pointer;">Back</button>
+    <div style={{ flex: "1", minWidth: "300px", background: isDarkMode ? "#2a2a2a" : "#fff", padding: "30px", borderRadius: "10px", boxShadow: "0 2px 10px rgba(0,0,0,0.2)" }}>
+      <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", fontWeight: 500, color: isDarkMode ? "#fff" : "#333" }}>Register Product</h2>
+      {contractLoading && <p>Loading blockchain connection...</p>}
+      {contractError && <p style={{ color: isDarkMode ? "#ff9999" : "#721c24" }}>{contractError}</p>}
+      <input
+        type="text"
+        placeholder="Product Name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        style={{ width: "100%", padding: "12px", marginBottom: "15px", border: `1px solid ${isDarkMode ? "#444" : "#ccc"}`, borderRadius: "6px", fontSize: "1rem", outline: "none", boxSizing: "border-box", background: isDarkMode ? "#333" : "#fff", color: isDarkMode ? "#fff" : "#333" }}
+      />
+      <input
+        type="text"
+        placeholder="Product ID (must be unique)"
+        value={productId}
+        onChange={(e) => setProductId(e.target.value)}
+        style={{ width: "100%", padding: "12px", marginBottom: "15px", border: `1px solid ${isDarkMode ? "#444" : "#ccc"}`, borderRadius: "6px", fontSize: "1rem", outline: "none", boxSizing: "border-box", background: isDarkMode ? "#333" : "#fff", color: isDarkMode ? "#fff" : "#333" }}
+      />
+      <button
+        onClick={registerProduct}
+        disabled={loadingRegister || !contract || contractLoading}
+        style={{ width: "100%", padding: "12px", background: loadingRegister || !contract || contractLoading ? (isDarkMode ? "#666" : "#999") : isDarkMode ? "#007bff" : "#333", border: "none", borderRadius: "6px", color: "#fff", fontSize: "1rem", cursor: loadingRegister || !contract || contractLoading ? "not-allowed" : "pointer", transition: "background 0.3s" }}
+      >
+        {loadingRegister ? "Processing..." : "Register"}
+      </button>
+      <button onClick={() => { setView("sellerDashboard"); setResultRegister(null); setQrCodeUrl(null); setQrCodeText(""); }} style={{ width: "100%", padding: "12px", background: isDarkMode ? "#555" : "#666", border: "none", borderRadius: "6px", color: "#fff", fontSize: "1rem", cursor: "pointer", marginTop: "10px", transition: "background 0.3s" }}>
+        Back
+      </button>
+      {resultRegister && (
+        <div style={{ marginTop: "20px", padding: "15px", borderRadius: "6px", border: "1px solid", borderColor: resultRegister.error ? (isDarkMode ? "#ff6666" : "#d9534f") : isDarkMode ? "#66cc66" : "#5cb85c", background: resultRegister.error ? (isDarkMode ? "#3d2a2a" : "#f2dede") : isDarkMode ? "#2a3d2a" : "#dff0d8", fontSize: "0.9rem", color: isDarkMode ? "#fff" : "#333" }}>
+          <strong>{resultRegister.error ? "Error" : "Success"}</strong>
+          <p style={{ margin: "5px 0 0" }}>{resultRegister.error || resultRegister.message}</p>
+          {qrCodeUrl && !resultRegister.error && (
+            <div style={{ marginTop: "10px" }}>
+              <p>QR Code URL: {qrCodeText}</p>
+              <button onClick={() => { navigator.clipboard.writeText(qrCodeText); alert("URL copied to clipboard!"); }} style={{ padding: "8px", background: isDarkMode ? "#1a73e8" : "#007bff", border: "none", borderRadius: "6px", color: "#fff", fontSize: "0.9rem", cursor: "pointer", marginBottom: "10px" }}>
+                Copy URL
+              </button>
+              <p>Download or scan this QR code:</p>
+              <img src={qrCodeUrl} alt="Product QR Code" style={{ maxWidth: "100%", width: "200px", height: "200px", objectFit: "contain" }} />
+              <br />
+              <a href={qrCodeUrl} download={`${productId}_qr.png`} style={{ color: isDarkMode ? "#1a73e8" : "#333", textDecoration: "underline" }}>Download QR Code</a>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 
   const renderVerifyView = () => (
-    <div style={{ flex: 1, minWidth: 280px, background: "#fff", padding: "30px", borderRadius: "10px", boxShadow: "0 2px 10px rgba(0, 0, 0, 0.2)"}}>
-      <h2 style="font-size: 1.5rem; margin-bottom: 15px; color: #333;">Verify Product</h2>
-      <input type="text" placeholder="Product ID" value="" style={{ marginBottom: "15px", width: "100%", border: "2px solid #333", padding: "10px", borderRadius: "4px", fontSize: "1rem" }} />
-      <button style="width: 100%; padding: 12px; background: #333; border-radius: 4px; color: #fff; font-size: 1rem; cursor: pointer;">Verify Manually</button>
-      <input type="file" accept="image/*" style="margin: 20px 0;" />
-      <button style="width: 100%; padding: 12px; background: #28a745; border-radius: 4px; color: #fff; cursor: pointer;">Upload Image</button>
-      <button style="width: 100%; margin-top: 10px; padding: 12px; background: #007bff; border-radius: 4px; color: #fff; cursor: pointer;">Scan Webcam</button>
-      <button style="width: 100%; margin-top: 20px; padding: 12px; background: #666; border-radius: 4px; color: #fff; cursor: pointer;">Back</button>
+    <div style={{ flex: "1", minWidth: "300px", background: isDarkMode ? "#2a2a2a" : "#fff", padding: "30px", borderRadius: "10px", boxShadow: "0 2px 10px rgba(0,0,0,0.2)" }}>
+      <h2 style={{ fontSize: "1.5rem", marginBottom: "20px", fontWeight: 500, color: isDarkMode ? "#fff" : "#333" }}>Verify Product</h2>
+      {contractLoading && <p>Loading blockchain connection...</p>}
+      {contractError && <p style={{ color: isDarkMode ? "#ff9999" : "#721c24" }}>{contractError}</p>}
+      <input
+        type="text"
+        placeholder="Product ID"
+        value={verifyId}
+        onChange={(e) => setVerifyId(e.target.value)}
+        style={{ width: "100%", padding: "12px", marginBottom: "15px", border: `1px solid ${isDarkMode ? "#444" : "#ccc"}`, borderRadius: "6px", fontSize: "1rem", outline: "none", boxSizing: "border-box", background: isDarkMode ? "#333" : "#fff", color: isDarkMode ? "#fff" : "#333" }}
+      />
+      <button
+        onClick={() => verifyProductById(verifyId)}
+        disabled={loadingVerify || !contract || contractLoading}
+        style={{ width: "100%", padding: "12px", background: loadingVerify || !contract || contractLoading ? (isDarkMode ? "#666" : "#999") : isDarkMode ? "#007bff" : "#333", border: "none", borderRadius: "6px", color: "#fff", fontSize: "1rem", cursor: loadingVerify || !contract || contractLoading ? "not-allowed" : "pointer", transition: "background 0.3s" }}
+      >
+        {loadingVerify ? "Verifying..." : "Verify Manually"}
+      </button>
+      <input type="file" accept="image/*" onChange={(e) => setQrImage(e.target.files ? e.target.files[0] : null)} style={{ marginTop: "10px", marginBottom: "10px", color: isDarkMode ? "#fff" : "#333" }} />
+      <button onClick={scanQrFromImage} disabled={!contract || contractLoading} style={{ width: "100%", padding: "12px", background: !contract || contractLoading ? (isDarkMode ? "#666" : "#999") : isDarkMode ? "#28a745" : "#28a745", border: "none", borderRadius: "6px", color: "#fff", fontSize: "1rem", cursor: !contract || contractLoading ? "not-allowed" : "pointer", marginBottom: "10px" }}>
+        Scan QR from Image
+      </button>
+      <button onClick={scanning ? stopScanner : startScanner} disabled={!contract || contractLoading} style={{ width: "100%", padding: "12px", background: !contract || contractLoading ? (isDarkMode ? "#666" : "#999") : isDarkMode ? "#1a73e8" : "#007bff", border: "none", borderRadius: "6px", color: "#fff", fontSize: "1rem", cursor: !contract || contractLoading ? "not-allowed" : "pointer", marginBottom: "10px" }}>
+        {scanning ? "Stop Scanning" : "Scan QR with Webcam"}
+      </button>
+      <button onClick={() => { setView("customerDashboard"); setResultVerify(null); stopScanner(); setQrImagePreview(null); }} style={{ width: "100%", padding: "12px", background: isDarkMode ? "#555" : "#666", border: "none", borderRadius: "6px", color: "#fff", fontSize: "1rem", cursor: "pointer", transition: "background 0.3s" }}>
+        Back
+      </button>
+      {qrImagePreview && (
+        <div style={{ marginTop: "10px" }}>
+          <p style={{ color: isDarkMode ? "#fff" : "#333" }}>Uploaded Image Preview:</p>
+          <img src={qrImagePreview} alt="Uploaded QR" style={{ maxWidth: "100%", borderRadius: "6px" }} />
+        </div>
+      )}
+      {scanning && (
+        <>
+          <video ref={videoRef} style={{ width: "100%", marginTop: "10px", borderRadius: "6px" }} />
+          <p style={{ marginTop: "10px", fontSize: "0.9rem", color: isDarkMode ? "#1a73e8" : "#007bff" }}>{scanStatus}</p>
+        </>
+      )}
+      {resultVerify && (
+        <div style={{ marginTop: "20px", padding: "15px", borderRadius: "6px", border: "1px solid", borderColor: resultVerify.error ? (isDarkMode ? "#ff6666" : "#d9534f") : isDarkMode ? "#66cc66" : "#5cb85c", background: resultVerify.error ? (isDarkMode ? "#3d2a2a" : "#f2dede") : isDarkMode ? "#2a3d2a" : "#dff0d8", fontSize: "0.9rem", color: isDarkMode ? "#fff" : "#333" }}>
+          <strong>{resultVerify.error ? "Error" : "Product Details"}</strong>
+          {resultVerify.exists ? (
+            <div style={{ marginTop: "5px", lineHeight: "1.5" }}>
+              <p>Product: {resultVerify.name}</p>
+              <p>Registered By: {truncateAddress(resultVerify.registeredBy)}</p>
+              <p>Date: {resultVerify.timestamp}</p>
+              <p>Block: {resultVerify.blockNumber}</p>
+            </div>
+          ) : (
+            <p style={{ margin: "5px 0 0" }}>{resultVerify.message || resultVerify.error}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 
@@ -911,23 +983,25 @@ function App() {
         top: 0,
         left: 0,
         right: 0,
-        background: "#333",
-        boxShadow: "0 2px 2px rgba(0,0,0,0.2)",
+        background: isDarkMode ? "#2a2a2a" : "#fff",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
         padding: "10px 20px",
-        display: flex,
-        justifyContent: space-between,
-        alignItems: center,
-        zIndex: 1,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        zIndex: 1000,
+        fontFamily: "'Helvetica Neue', Arial, sans-serif",
+        color: isDarkMode ? "#fff" : "#333",
       }}
     >
-      <div style={{ display: flex, alignItems: center }}>
+      <div style={{ display: "flex", alignItems: "center" }}>
         <h1
           style={{
             fontSize: "1.5rem",
-            fontWeight: bold,
+            fontWeight: 700,
             margin: 0,
-            cursor: pointer,
-            color: #fff,
+            cursor: "pointer",
+            color: isDarkMode ? "#fff" : "#333",
           }}
           onClick={() => {
             if (userRole === "seller") setView("sellerDashboard");
@@ -935,7 +1009,7 @@ function App() {
             setIsNavMenuOpen(false);
           }}
         >
-          PandoraBox
+          Pandora Box
         </h1>
       </div>
 
@@ -957,12 +1031,18 @@ function App() {
                 setIsNavMenuOpen(false);
               }}
               style={{
-                background: none,
-                border: none,
-                color: view === "sellerDashboard" ? "#007bff" : "#fff",
-                padding: "10px",
-                cursor: pointer,
+                background: "none",
+                border: "none",
+                color: view === "sellerDashboard" ? (isDarkMode ? "#007bff" : "#333") : isDarkMode ? "#ccc" : "#666",
+                fontSize: "1rem",
+                fontWeight: view === "sellerDashboard" ? 600 : 400,
+                cursor: "pointer",
+                padding: "8px 12px",
+                borderRadius: "6px",
+                transition: "color 0.3s, background 0.3s",
               }}
+              onMouseOver={(e) => (e.target.style.color = isDarkMode ? "#1a73e8" : "#555")}
+              onMouseOut={(e) => (e.target.style.color = view === "sellerDashboard" ? (isDarkMode ? "#007bff" : "#333") : isDarkMode ? "#ccc" : "#666")}
             >
               Dashboard
             </button>
@@ -972,12 +1052,18 @@ function App() {
                 setIsNavMenuOpen(false);
               }}
               style={{
-                background: none,
-                border: none,
-                color: view === "registerProduct" ? "#007bff" : "#fff",
-                padding: "10px",
-                cursor: pointer,
+                background: "none",
+                border: "none",
+                color: view === "registerProduct" ? (isDarkMode ? "#007bff" : "#333") : isDarkMode ? "#ccc" : "#666",
+                fontSize: "1rem",
+                fontWeight: view === "registerProduct" ? 600 : 400,
+                cursor: "pointer",
+                padding: "8px 12px",
+                borderRadius: "6px",
+                transition: "color 0.3s, background 0.3s",
               }}
+              onMouseOver={(e) => (e.target.style.color = isDarkMode ? "#1a73e8" : "#555")}
+              onMouseOut={(e) => (e.target.style.color = view === "registerProduct" ? (isDarkMode ? "#007bff" : "#333") : isDarkMode ? "#ccc" : "#666")}
             >
               Register Product
             </button>
@@ -991,12 +1077,18 @@ function App() {
                 setIsNavMenuOpen(false);
               }}
               style={{
-                background: none,
-                border: none,
-                color: view === "customerDashboard" ? "#007bff" : "#fff",
-                padding: "10px",
-                cursor: pointer,
+                background: "none",
+                border: "none",
+                color: view === "customerDashboard" ? (isDarkMode ? "#007bff" : "#333") : isDarkMode ? "#ccc" : "#666",
+                fontSize: "1rem",
+                fontWeight: view === "customerDashboard" ? 600 : 400,
+                cursor: "pointer",
+                padding: "8px 12px",
+                borderRadius: "6px",
+                transition: "color 0.3s, background 0.3s",
               }}
+              onMouseOver={(e) => (e.target.style.color = isDarkMode ? "#1a73e8" : "#555")}
+              onMouseOut={(e) => (e.target.style.color = view === "customerDashboard" ? (isDarkMode ? "#007bff" : "#333") : isDarkMode ? "#ccc" : "#666")}
             >
               Dashboard
             </button>
@@ -1006,12 +1098,18 @@ function App() {
                 setIsNavMenuOpen(false);
               }}
               style={{
-                background: none,
-                border: none,
-                color: view === "verify" ? "#007bff" : "#fff",
-                padding: "10px",
-                cursor: pointer,
+                background: "none",
+                border: "none",
+                color: view === "verify" ? (isDarkMode ? "#007bff" : "#333") : isDarkMode ? "#ccc" : "#666",
+                fontSize: "1rem",
+                fontWeight: view === "verify" ? 600 : 400,
+                cursor: "pointer",
+                padding: "8px 12px",
+                borderRadius: "6px",
+                transition: "color 0.3s, background 0.3s",
               }}
+              onMouseOver={(e) => (e.target.style.color = isDarkMode ? "#1a73e8" : "#555")}
+              onMouseOut={(e) => (e.target.style.color = view === "verify" ? (isDarkMode ? "#007bff" : "#333") : isDarkMode ? "#ccc" : "#666")}
             >
               Verify Product
             </button>
@@ -1023,12 +1121,18 @@ function App() {
             setIsNavMenuOpen(false);
           }}
           style={{
-            background: none,
-            border: none,
-            color: view === "profile" ? "#007bff" : "#fff",
-            padding: "10px",
-            cursor: pointer,
+            background: "none",
+            border: "none",
+            color: view === "profile" ? (isDarkMode ? "#007bff" : "#333") : isDarkMode ? "#ccc" : "#666",
+            fontSize: "1rem",
+            fontWeight: view === "profile" ? 600 : 400,
+            cursor: "pointer",
+            padding: "8px 12px",
+            borderRadius: "6px",
+            transition: "color 0.3s, background 0.3s",
           }}
+          onMouseOver={(e) => (e.target.style.color = isDarkMode ? "#1a73e8" : "#555")}
+          onMouseOut={(e) => (e.target.style.color = view === "profile" ? (isDarkMode ? "#007bff" : "#333") : isDarkMode ? "#ccc" : "#666")}
         >
           Profile
         </button>
@@ -1042,49 +1146,55 @@ function App() {
         }}
       >
         {loggedInUser && (
-          <span style={{ color: "#fff" }}>
+          <span style={{ fontSize: "0.9rem", color: isDarkMode ? "#ccc" : "#666" }}>
             {loggedInUser} ({userRole})
           </span>
         )}
         <button
           onClick={() => setIsDarkMode(!isDarkMode)}
           style={{
-            padding: "10px",
-            background: "#666",
-            border: none,
-            borderRadius: "4px",
-            color: "#fff",
+            padding: "6px 12px",
+            background: isDarkMode ? "#555" : "#ddd",
+            border: "none",
+            borderRadius: "6px",
+            color: isDarkMode ? "#fff" : "#333",
+            fontSize: "0.9rem",
             cursor: "pointer",
+            transition: "background 0.3s",
           }}
         >
-          Dark Mode
+          {isDarkMode ? "Light" : "Dark"}
         </button>
-        <button
-          onClick={handleLogout}
-          style={{
-            padding: "10px",
-            background: "#dc3545",
-            border: none,
-            borderRadius: "4px",
-            color: "#fff",
-            cursor: "pointer,
-          }}
-        >
-          Logout
-        </button>
+        {loggedInUser && (
+          <button
+            onClick={handleLogout}
+            style={{
+              padding: "6px 12px",
+              background: isDarkMode ? "#ff4444" : "#d9534f",
+              border: "none",
+              borderRadius: "6px",
+              color: "#fff",
+              fontSize: "0.9rem",
+              cursor: "pointer",
+              transition: "background 0.3s",
+            }}
+          >
+            Logout
+          </button>
+        )}
         <button
           className="hamburger"
           onClick={() => setIsNavMenuOpen(!isNavMenuOpen)}
           style={{
             display: "none",
-            background: none,
-            border: none,
+            background: "none",
+            border: "none",
             fontSize: "1.5rem",
-            color: "#fff",
+            color: isDarkMode ? "#fff" : "#333",
             cursor: "pointer",
           }}
         >
-          {isNavMenuOpen ? "…" : "≡"}
+          {isNavMenuOpen ? "✕" : "☰"}
         </button>
       </div>
 
@@ -1092,16 +1202,17 @@ function App() {
         <div
           className="mobile-menu"
           style={{
-            position: absolute,
+            position: "absolute",
             top: "60px",
             left: "0",
-            right: 0,
-            background: "#333",
+            right: "0",
+            background: isDarkMode ? "#2a2a2a" : "#fff",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
             padding: "10px 20px",
-            display: flex,
-            flex-direction: column,
-            gap: 5px,
-            zIndex: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px",
+            zIndex: 999,
           }}
         >
           {userRole === "seller" && (
@@ -1111,7 +1222,16 @@ function App() {
                   setView("sellerDashboard");
                   setIsNavMenuOpen(false);
                 }}
-                style={{ color: "#007bff", padding: "10px", background: none, cursor: pointer }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: view === "sellerDashboard" ? (isDarkMode ? "#007bff" : "#333") : isDarkMode ? "#ccc" : "#666",
+                  fontSize: "1rem",
+                  fontWeight: view === "sellerDashboard" ? 600 : 400,
+                  cursor: "pointer",
+                  padding: "8px 12px",
+                  textAlign: "left",
+                }}
               >
                 Dashboard
               </button>
@@ -1120,7 +1240,16 @@ function App() {
                   setView("registerProduct");
                   setIsNavMenuOpen(false);
                 }}
-                style={{ color: "#007bff", padding: "10px", background: none, cursor: pointer }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: view === "registerProduct" ? (isDarkMode ? "#007bff" : "#333") : isDarkMode ? "#ccc" : "#666",
+                  fontSize: "1rem",
+                  fontWeight: view === "registerProduct" ? 600 : 400,
+                  cursor: "pointer",
+                  padding: "8px 12px",
+                  textAlign: "left",
+                }}
               >
                 Register Product
               </button>
@@ -1133,16 +1262,34 @@ function App() {
                   setView("customerDashboard");
                   setIsNavMenuOpen(false);
                 }}
-                style={{ color: "#007bff", padding: "10px", background: none, cursor: pointer }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: view === "customerDashboard" ? (isDarkMode ? "#007bff" : "#333") : isDarkMode ? "#ccc" : "#666",
+                  fontSize: "1rem",
+                  fontWeight: view === "customerDashboard" ? 600 : 400,
+                  cursor: "pointer",
+                  padding: "8px 12px",
+                  textAlign: "left",
+                }}
               >
-                Customer Dashboard
+                Dashboard
               </button>
               <button
                 onClick={() => {
                   setView("verify");
                   setIsNavMenuOpen(false);
                 }}
-                style={{ color: "#007bff", padding: "10px", background: none, cursor: pointer }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: view === "verify" ? (isDarkMode ? "#007bff" : "#333") : isDarkMode ? "#ccc" : "#666",
+                  fontSize: "1rem",
+                  fontWeight: view === "verify" ? 600 : 400,
+                  cursor: "pointer",
+                  padding: "8px 12px",
+                  textAlign: "left",
+                }}
               >
                 Verify Product
               </button>
@@ -1153,22 +1300,53 @@ function App() {
               setView("profile");
               setIsNavMenuOpen(false);
             }}
-            style={{ color: "#007bff", padding: "10px", background: none, cursor: pointer }}
+            style={{
+              background: "none",
+              border: "none",
+              color: view === "profile" ? (isDarkMode ? "#007bff" : "#333") : isDarkMode ? "#ccc" : "#666",
+              fontSize: "1rem",
+              fontWeight: view === "profile" ? 600 : 400,
+              cursor: "pointer",
+              padding: "8px 12px",
+              textAlign: "left",
+            }}
           >
             Profile
           </button>
-          <button
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            style={{ color: "#007bff", padding: "10px", background: none, cursor: pointer }}
-          >
-            Dark Mode
-          </button>
-          <button
-            onClick={handleLogout}
-            style={{ color: "#007bff", padding: "10px", background: none, cursor: pointer }}
-          >
-            Logout
-          </button>
+          {loggedInUser && (
+            <>
+              <button
+                onClick={() => setIsDarkMode(!isDarkMode)}
+                style={{
+                  padding: "8px 12px",
+                  background: isDarkMode ? "#555" : "#ddd",
+                  border: "none",
+                  borderRadius: "6px",
+                  color: isDarkMode ? "#fff" : "#333",
+                  fontSize: "1rem",
+                  cursor: "pointer",
+                  textAlign: "left",
+                }}
+              >
+                {isDarkMode ? "Light Mode" : "Dark Mode"}
+              </button>
+              <button
+                onClick={handleLogout}
+                style={{
+                  padding: "8px 12px",
+                  background: isDarkMode ? "#ff4444" : "#d9534f",
+                  border: "none",
+                  borderRadius: "6px",
+                  color: "#fff",
+                  fontSize: "1rem",
+                  cursor: "pointer",
+                  textAlign: "left",
+                }}
+              >
+                Logout
+              </button>
+            </>
+          )}
         </div>
       )}
     </nav>
@@ -1185,6 +1363,9 @@ function App() {
       .nav-right span {
         display: none !important;
       }
+      .nav-right button:not(.hamburger) {
+        display: none !important;
+      }
     }
     @media (min-width: 769px) {
       .mobile-menu {
@@ -1194,26 +1375,31 @@ function App() {
   `;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#eee", padding: "80px 10px 10px 10px" }}>
+    <div style={{ minHeight: "100vh", background: isDarkMode ? "#1a1a1a" : "#f5f5f5", display: "flex", flexDirection: "column", alignItems: "center", padding: "80px 20px 20px 20px", fontFamily: "'Helvetica Neue', Arial, sans-serif", color: isDarkMode ? "#fff" : "#333", transition: "background 0.3s, color 0.3s" }}>
       <style>{styles}</style>
       {view !== "login" && view !== "register" && renderNavbar()}
-      <div style={{ display: flex, justifyContent: center }}>
-        {view === "login" && <loginView />}
-        {view === "register" && <registerView />}
-        {view === "sellerDashboard" && <sellerDashboard />}
-        {view === "customerDashboard" && <customerDashboard />}
-        {view === "registerProduct" && <registerProductView />}
-        {view === "verify" && <verifyView />}
-        {view === "profile" && <profileView />}
+      {view !== "login" && view !== "register" && (
+        <div style={{ textAlign: "center", marginBottom: "20px", color: isDarkMode ? "#ccc" : "#666", fontSize: "0.9rem" }}>
+          Connected: {account ? truncateAddress(account) : "Not connected"}
+        </div>
+      )}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", maxWidth: "900px", width: "100%", justifyContent: "center" }}>
+        {view === "login" && renderLoginView()}
+        {view === "register" && renderRegisterView()}
+        {view === "sellerDashboard" && renderSellerDashboard()}
+        {view === "customerDashboard" && renderCustomerDashboard()}
+        {view === "registerProduct" && renderRegisterProductView()}
+        {view === "verify" && renderVerifyView()}
+        {view === "profile" && renderProfileView()}
       </div>
       {view !== "login" && view !== "register" && (
         <Chatbot
-          isDarkMode={false}
-          userRole="seller"
-          onAction={() => console.log("Action!")}
+          isDarkMode={isDarkMode}
+          userRole={userRole}
+          onAction={handleChatbotAction}
         />
       )}
-      <canvas></canvas>
+      <canvas ref={canvasRef} style={{ display: "none" }} />
     </div>
   );
 }
