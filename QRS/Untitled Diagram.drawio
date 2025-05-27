@@ -1,0 +1,45 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36" version="26.2.10">
+  <diagram name="Page-1" id="2YBvvXClWsGukQMizWep">
+    <mxGraphModel dx="540" dy="299" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="cw-itAkS4Nq10oJdh1g7-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="cw-itAkS4Nq10oJdh1g7-1" target="cw-itAkS4Nq10oJdh1g7-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cw-itAkS4Nq10oJdh1g7-1" value="&lt;div&gt;Centralized Cloud&amp;nbsp; &lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;(Service Registry,&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&amp;nbsp; Orchestrator, RAMF)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="188" y="100" width="142" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="cw-itAkS4Nq10oJdh1g7-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="cw-itAkS4Nq10oJdh1g7-3">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="340.0000000000001" y="123" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="340" y="123" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cw-itAkS4Nq10oJdh1g7-3" value="&amp;nbsp;L3" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="360" y="109" width="40" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="cw-itAkS4Nq10oJdh1g7-5" value="Core Network Edge&amp;nbsp;&lt;div&gt;&lt;div&gt;(Cmini - Moderate&amp;nbsp;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;delay tasks)&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="188" y="200" width="142" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="cw-itAkS4Nq10oJdh1g7-7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="340.0000000000001" y="220" as="targetPoint" />
+            <mxPoint x="360" y="220" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cw-itAkS4Nq10oJdh1g7-8" value="L2" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="360" y="205" width="40" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="cw-itAkS4Nq10oJdh1g7-10" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="188" y="310" width="142" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="cw-itAkS4Nq10oJdh1g7-11" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="188" y="420" width="142" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
