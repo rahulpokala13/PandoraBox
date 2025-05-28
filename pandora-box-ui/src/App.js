@@ -3,6 +3,7 @@ import { ethers } from "ethers";
 import QRCode from "qrcode";
 import jsQR from "jsqr";
 import QrCode from "qrcode-reader";
+F
 import { contractAddress } from "./contractAddress.js";
 import Chatbot from "./Chatbot.js";
 
@@ -19,6 +20,8 @@ const abi = [
     inputs: [],
     stateMutability: "nonpayable",
     type: "constructor",
+    
+
   },
   {
     anonymous: false,
@@ -160,7 +163,7 @@ function App() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
 
-  // Add hardcoded registration dates to existing users
+  // Added hardcoded registration dates to existing users
   useEffect(() => {
     const users = JSON.parse(localStorage.getItem("users") || "[]");
     let updated = false;
@@ -174,12 +177,13 @@ function App() {
       localStorage.setItem("users", JSON.stringify(users));
     }
   }, []);
-
+// contract initialization
   const initializeContract = useCallback(async () => {
     if (contract) return;
     setContractLoading(true);
     setContractError(null);
     try {
+      // connecting to the blockchain 
       const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
       const wallet = new ethers.Wallet(privateKey, provider);
       const contractInstance = new ethers.Contract(contractAddress, abi, wallet);
@@ -226,7 +230,7 @@ function App() {
       return;
     }
 
-    // ✅ PATCH: Assign seller "Rahul pokala" products to logged-in user (if missing)
+    //  Assign seller "Rahul pokala" products to logged-in user (if missing)
     try {
       const loggedInUser = localStorage.getItem("loggedInUser");
       const registeredProducts = JSON.parse(localStorage.getItem("registeredProducts") || "[]");
@@ -293,6 +297,7 @@ function App() {
   [contract]
 );
 
+// verifyProductById is used to verify a product by its ID
 
   const verifyProductById = useCallback(
     async (id) => {
@@ -435,6 +440,7 @@ function App() {
     setQrImagePreview(null);
     setIsNavMenuOpen(false);
   };
+// registerProduct is used to register a new product on the blockchain
 
   const registerProduct = async () => {
     if (!contract) {
@@ -740,7 +746,8 @@ function App() {
   const renderSellerDashboard = () => {
   const loggedInUser = localStorage.getItem("loggedInUser");
 
-  // ✅ PATCH: Assign seller to any products with name 'Rahul pokala'
+  // 
+  // F Assign seller to any products with name 'Rahul pokala'
   const allProducts = JSON.parse(localStorage.getItem("registeredProducts") || "[]");
   let updated = false;
   const patchedProducts = allProducts.map((product) => {
